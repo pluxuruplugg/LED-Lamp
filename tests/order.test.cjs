@@ -25,7 +25,7 @@ beforeEach(() => {
   calls = [];
   process.env.CRM_LEADS_ENDPOINT = 'https://crm.invalid/api/leads';
   process.env.LANDING_API_KEY = 'unit-test-key';
-  process.env.LANDING_ID = 'landing-2';
+  process.env.LANDING_ID = 'landing-4';
   delete process.env.SITE_URL;
   global.fetch = async (...args) => {
     calls.push(args);
@@ -70,7 +70,7 @@ test('missing server credentials prevent any upstream request', async () => {
   assert.equal(calls.length, 0);
 });
 
-test('sends the registered landingId and fixed price/quantity without catalog fields', async () => {
+test('sends the registered landingId and only server-owned attribution and contacts without product, price or quantity fields', async () => {
   const response = await POST(request({ ...valid, price: 1, productId: 'attacker-id', productName: 'Forged title', landingId: 'forged-id', source: 'other', quantity: 99 }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { success: true });
@@ -84,12 +84,12 @@ test('sends the registered landingId and fixed price/quantity without catalog fi
   assert.equal('productId' in payload, false);
   assert.equal('productVariantId' in payload, false);
   assert.equal('productName' in payload, false);
-  assert.equal(payload.quantity, 1);
+  assert.equal('quantity' in payload, false);
   assert.equal(payload.source, 'Лендинг 3');
-  assert.equal(payload.landingId, 'landing-2');
+  assert.equal(payload.landingId, 'landing-4');
   assert.equal(payload.requestId, requestId);
-  assert.ok(payload.comment.includes('299 грн'));
-  assert.equal(payload.price, 299);
+  assert.equal('comment' in payload, false);
+  assert.equal('price' in payload, false);
   assert.equal(payload.customerName, valid.name);
   assert.ok(options.signal instanceof AbortSignal);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
@@ -125,7 +125,7 @@ test('blank/oversized landingId and insecure CRM endpoints fail before sending',
     process.env.LANDING_ID = id;
     assert.equal((await POST(request())).status, 503);
   }
-  process.env.LANDING_ID = 'landing-2';
+  process.env.LANDING_ID = 'landing-4';
   for (const endpoint of ['http://crm.invalid/api/leads', 'https://user:password@crm.invalid/api/leads', 'not-a-url']) {
     process.env.CRM_LEADS_ENDPOINT = endpoint;
     assert.equal((await POST(request())).status, 503);

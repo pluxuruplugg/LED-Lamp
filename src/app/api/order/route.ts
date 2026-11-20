@@ -40,19 +40,16 @@ export async function POST(request: Request) {
   const customer = prepareOrder(fields);
   try {
     // CRM resolves the product name from its active Landing record.
-    // Price, quantity, source and landingId are server-controlled; ignore browser overrides.
+    // CRM owns name, price and quantity. Browser overrides are never forwarded.
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify({
         customerName: customer.name,
         customerPhone: customer.phone,
-        price: 299,
-        quantity: 1,
         source: "Лендинг 3",
         landingId,
         requestId: data.requestId,
-        comment: "Ціна на лендингу: 299 грн\nКількість: 1 шт.",
       }),
       cache: "no-store",
       redirect: "error",
