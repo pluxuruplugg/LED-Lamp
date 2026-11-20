@@ -30,9 +30,8 @@ export async function POST(request: Request) {
 
   const endpoint = process.env.CRM_LEADS_ENDPOINT?.trim();
   const apiKey = process.env.LANDING_API_KEY?.trim();
-  const productId = process.env.LANDING_PRODUCT_ID?.trim();
-  const landingId = process.env.LANDING_ID?.trim() || "landing-3";
-  if (!endpoint || !apiKey || !productId || landingId.length > 120) return fail(503);
+  const landingId = process.env.LANDING_ID?.trim();
+  if (!endpoint || !apiKey || !landingId || landingId.length > 120) return fail(503);
   try {
     const url = new URL(endpoint);
     if (url.protocol !== "https:" || url.username || url.password) return fail(503);
@@ -40,20 +39,20 @@ export async function POST(request: Request) {
 
   const customer = prepareOrder(fields);
   try {
-    // Confirmed contract: landing-1/src/app/api/order/route.ts and CRM/app/api/leads/route.ts.
-    // The catalog product sets the actual order name and price; never trust browser prices.
+    // CRM resolves the product name from its active Landing record.
+    // Price, quantity, source and landingId are server-controlled; ignore browser overrides.
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify({
         customerName: customer.name,
         customerPhone: customer.phone,
-        productId,
+        price: 299,
         quantity: 1,
         source: "Лендинг 3",
         landingId,
         requestId: data.requestId,
-        comment: "Товар: Аварійна LED-лампа FAE-3920\nЦіна на лендингу: 299 грн\nКількість: 1 шт.",
+        comment: "Ціна на лендингу: 299 грн\nКількість: 1 шт.",
       }),
       cache: "no-store",
       redirect: "error",

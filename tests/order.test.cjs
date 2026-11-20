@@ -14,7 +14,7 @@ function load(file, dependencies = {}) {
 
 const order = load('src/lib/order.ts');
 const { POST } = load('src/app/api/order/route.ts', { '@/lib/order': order });
-const envKeys = ['CRM_LEADS_ENDPOINT', 'LANDING_API_KEY', 'LANDING_PRODUCT_ID', 'LANDING_ID', 'SITE_URL'];
+const envKeys = ['CRM_LEADS_ENDPOINT', 'LANDING_API_KEY', 'LANDING_ID', 'SITE_URL'];
 const savedEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
 const originalFetch = global.fetch;
 const requestId = 'dc06ae55-a844-4c80-88ed-d944b72d8249';
@@ -25,8 +25,7 @@ beforeEach(() => {
   calls = [];
   process.env.CRM_LEADS_ENDPOINT = 'https://crm.invalid/api/leads';
   process.env.LANDING_API_KEY = 'unit-test-key';
-  process.env.LANDING_PRODUCT_ID = 'test-lamp-id';
-  process.env.LANDING_ID = 'landing-3';
+  process.env.LANDING_ID = 'landing-2';
   delete process.env.SITE_URL;
   global.fetch = async (...args) => {
     calls.push(args);
@@ -62,7 +61,7 @@ test('rejects wrong content type and oversized bodies', async () => {
 });
 
 test('missing server credentials prevent any upstream request', async () => {
-  for (const key of ['CRM_LEADS_ENDPOINT', 'LANDING_API_KEY', 'LANDING_PRODUCT_ID']) {
+  for (const key of ['CRM_LEADS_ENDPOINT', 'LANDING_API_KEY', 'LANDING_ID']) {
     const value = process.env[key];
     delete process.env[key];
     assert.equal((await POST(request())).status, 503);
@@ -71,8 +70,8 @@ test('missing server credentials prevent any upstream request', async () => {
   assert.equal(calls.length, 0);
 });
 
-test('sends only confirmed CRM catalog fields and ignores browser price/product/source', async () => {
-  const response = await POST(request({ ...valid, price: 1, productId: 'attacker-id', source: 'other', quantity: 99 }));
+test('sends the registered landingId and fixed price/quantity without catalog fields', async () => {
+  const response = await POST(request({ ...valid, price: 1, productId: 'attacker-id', productName: 'Forged title', landingId: 'forged-id', source: 'other', quantity: 99 }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { success: true });
   const [url, options] = calls[0];
@@ -82,13 +81,18 @@ test('sends only confirmed CRM catalog fields and ignores browser price/product/
   assert.equal(options.redirect, 'error');
   const payload = JSON.parse(options.body);
   assert.equal(payload.customerPhone, '+380671234567');
-  assert.equal(payload.productId, 'test-lamp-id');
+  assert.equal('productId' in payload, false);
+  assert.equal('productVariantId' in payload, false);
+  assert.equal('productName' in payload, false);
   assert.equal(payload.quantity, 1);
   assert.equal(payload.source, 'Лендинг 3');
-  assert.equal(payload.landingId, 'landing-3');
+  assert.equal(payload.landingId, 'landing-2');
   assert.equal(payload.requestId, requestId);
   assert.ok(payload.comment.includes('299 грн'));
-  assert.equal('price' in payload, false);
+  assert.equal(payload.price, 299);
+  assert.equal(payload.customerName, valid.name);
+  assert.ok(options.signal instanceof AbortSignal);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
 });
 
 test('requires HTTP success, explicit boolean success and a CRM order ID', async () => {
@@ -114,6 +118,31 @@ test('retry preserves the CRM requestId and does not perform automatic retries',
   await POST(request());
   assert.equal(calls.length, 2);
   assert.equal(JSON.parse(calls[0][1].body).requestId, JSON.parse(calls[1][1].body).requestId);
+});
+
+test('blank/oversized landingId and insecure CRM endpoints fail before sending', async () => {
+  for (const id of [' ', 'x'.repeat(121)]) {
+    process.env.LANDING_ID = id;
+    assert.equal((await POST(request())).status, 503);
+  }
+  process.env.LANDING_ID = 'landing-2';
+  for (const endpoint of ['http://crm.invalid/api/leads', 'https://user:password@crm.invalid/api/leads', 'not-a-url']) {
+    process.env.CRM_LEADS_ENDPOINT = endpoint;
+    assert.equal((await POST(request())).status, 503);
+  }
+  assert.equal(calls.length, 0);
+});
+
+test('CRM authorization, registry and rate-limit errors never report success or expose upstream details', async () => {
+  for (const status of [401, 403, 404, 422, 429, 503]) {
+    global.fetch = async () => Response.json({ success: false, error: 'private-upstream-detail' }, { status });
+    const response = await POST(request());
+    assert.equal(response.status, 502);
+    const result = await response.json();
+    assert.equal(result.success, false);
+    assert.ok(!JSON.stringify(result).includes('private-upstream-detail'));
+    assert.ok(!JSON.stringify(result).includes('unit-test-key'));
+  }
 });
 
 test('name validation, phone normalization and SEO without an invented domain', () => {
