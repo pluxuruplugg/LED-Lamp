@@ -30,8 +30,8 @@ export async function POST(request: Request) {
 
   const endpoint = process.env.CRM_LEADS_ENDPOINT?.trim();
   const apiKey = process.env.LANDING_API_KEY?.trim();
-  const landingId = process.env.LANDING_ID?.trim();
-  if (!endpoint || !apiKey || !landingId || landingId.length > 120) return fail(503);
+  const productId = process.env.LANDING_PRODUCT_ID?.trim();
+  if (!endpoint || !apiKey || !productId || productId.length > 120) return fail(503);
   try {
     const url = new URL(endpoint);
     if (url.protocol !== "https:" || url.username || url.password) return fail(503);
@@ -39,8 +39,8 @@ export async function POST(request: Request) {
 
   const customer = prepareOrder(fields);
   try {
-    // CRM resolves the product name from its active Landing record.
-    // CRM owns name, price and quantity. Browser overrides are never forwarded.
+    // CRM resolves the product name and sale price from its catalog.
+    // Product ID and quantity are server-controlled; browser overrides are ignored.
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey },
@@ -48,7 +48,8 @@ export async function POST(request: Request) {
         customerName: customer.name,
         customerPhone: customer.phone,
         source: "Лендинг 3",
-        landingId,
+        productId,
+        quantity: 1,
         requestId: data.requestId,
       }),
       cache: "no-store",
