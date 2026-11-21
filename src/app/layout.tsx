@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getSiteUrl, siteTitle, siteDescription } from "@/lib/site";
 import "./globals.css";
+import { VisitTracker } from "@/components/visit-tracker";
 
 const siteUrl = getSiteUrl();
 const socialImage = siteUrl ? [{ url: new URL("/images/land8.jpg", siteUrl).href, width: 1206, height: 1190, alt: "Аварійна LED-лампа FAE-3920 з упаковкою" }] : undefined;
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="uk">
-      <body>{children}</body>
+      <body>{children}<VisitTracker /></body>
     </html>
   );
 }

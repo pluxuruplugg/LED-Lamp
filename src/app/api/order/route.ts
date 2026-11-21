@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { trackingUrl } from "@/lib/tracking";
 import { prepareOrder, validateOrder } from "@/lib/order";
 
 export const runtime = "nodejs";
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
   } catch { return fail(503); }
 
   const customer = prepareOrder(fields);
+  const landingUrl = trackingUrl();
   try {
     // CRM resolves the product name and sale price from its catalog.
     // Product ID and quantity are server-controlled; browser overrides are ignored.
@@ -51,6 +53,7 @@ export async function POST(request: Request) {
         productId,
         quantity: 1,
         requestId: data.requestId,
+        ...(landingUrl ? { landingUrl } : {}),
       }),
       cache: "no-store",
       redirect: "error",

@@ -13,7 +13,8 @@ function load(file, dependencies = {}) {
 }
 
 const order = load('src/lib/order.ts');
-const { POST } = load('src/app/api/order/route.ts', { '@/lib/order': order });
+const tracking = load('src/lib/tracking.ts');
+const { POST } = load('src/app/api/order/route.ts', { '@/lib/order': order, '@/lib/tracking': tracking });
 const envKeys = ['CRM_LEADS_ENDPOINT', 'LANDING_API_KEY', 'LANDING_ID', 'LANDING_PRODUCT_ID', 'SITE_URL'];
 const savedEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
 const originalFetch = global.fetch;
@@ -72,7 +73,7 @@ test('missing server credentials prevent any upstream request', async () => {
 });
 
 test('sends server-configured productId, quantity one and contacts without landing registry fields or price', async () => {
-  const response = await POST(request({ ...valid, price: 1, productId: 'attacker-id', productName: 'Forged title', landingId: 'forged-id', source: 'other', quantity: 99 }));
+  const response = await POST(request({ ...valid, price: 1, productId: 'attacker-id', productName: 'Forged title', landingId: 'forged-id', landingUrl: 'https://evil.invalid', source: 'other', quantity: 99 }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { success: true });
   const [url, options] = calls[0];
@@ -88,6 +89,7 @@ test('sends server-configured productId, quantity one and contacts without landi
   assert.equal(payload.quantity, 1);
   assert.equal(payload.source, 'Лендинг 3');
   assert.equal('landingId' in payload, false);
+  assert.equal(payload.landingUrl, 'https://led-lamp.onrender.com');
   assert.equal(payload.requestId, requestId);
   assert.equal('comment' in payload, false);
   assert.equal('price' in payload, false);
@@ -177,9 +179,19 @@ test('legacy LANDING_ID is neither required nor forwarded to CRM', async () => {
   assert.equal(calls.length, 2);
   for (const [, options] of calls) {
     const payload = JSON.parse(options.body);
-    assert.deepEqual(Object.keys(payload).sort(), ['customerName', 'customerPhone', 'productId', 'quantity', 'requestId', 'source']);
+    assert.deepEqual(Object.keys(payload).sort(), ['customerName', 'customerPhone', 'landingUrl', 'productId', 'quantity', 'requestId', 'source']);
     assert.equal(payload.productId, 'cmwpgamza0001ukr2ru9od6km');
     assert.equal(payload.quantity, 1);
     assert.equal('landingId' in payload, false);
+  assert.equal(payload.landingUrl, 'https://led-lamp.onrender.com');
   }
+});
+
+
+test('invalid analytics-only SITE_URL cannot block a valid catalog order', async () => {
+  process.env.SITE_URL = 'not-a-url';
+  const response = await POST(request());
+  assert.equal(response.status, 200);
+  assert.equal(JSON.parse(calls[0][1].body).productId, 'cmwpgamza0001ukr2ru9od6km');
+  assert.equal('landingUrl' in JSON.parse(calls[0][1].body), false);
 });
